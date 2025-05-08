@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib
+from tqdm import tqdm
 
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -99,23 +100,43 @@ def extract_support_vectors(a, x_train, C):
     support_vector_indices = []
 
     for i in range(l):
-        if 0 < a[i] < C or 0 < a[i + l] < C:  # Проверяем условия для a_i и a_i^*
+        if (0 < a[i] < C and np.isclose(a[i+l], 0)) or (0 < a[i + l] < C and np.isclose(a[i], 0)):  # Проверяем условия для a_i и a_i^*
             support_vector_indices.append(i)
 
     support_vectors = x_train[support_vector_indices]
     return support_vector_indices, support_vectors
 
+def extract_bounded_support_vectors(a, x_train, C):
+    """
+    Выделяет связные векторы (граничные опорные векторы).
+    :param a: Массив двойственных переменных (размер 2*l).
+    :param x_train: Обучающие данные (размер l).
+    :param C: Параметр регуляризации.
+    :return: Индексы связных векторов и их координаты.
+    """
+    l = len(x_train)
+    bounded_support_vector_indices = []
+
+    for i in range(l):
+        if np.isclose(a[i], C) or np.isclose(a[i + l], C):  # Проверяем условия для a_i и a_i^*
+            bounded_support_vector_indices.append(i)
+
+    bounded_support_vectors = x_train[bounded_support_vector_indices]
+    return bounded_support_vector_indices, bounded_support_vectors
+
 
 def sinc_test():
+    omega = 1.0
+    noise_sigma = 0.35
     l = 200
     x_min, x_max = -5, 5
-    C = 3
-    epsilon = 0.07
-    gamma = 0.7
+    C = 15
+    epsilon = noise_sigma + 0.042
+    gamma = 1
     x = np.linspace(x_min, x_max, l)
     y_true = sinc_function(x)
 
-    noise = np.random.normal(0, 0.1, l)
+    noise = np.random.normal(0, noise_sigma, l)
     y_noisy = y_true + noise
 
     K = compute_kernel_matrix(x, gamma)
@@ -125,7 +146,7 @@ def sinc_test():
 
     c = np.concatenate([y_noisy - epsilon, -y_noisy - epsilon])
 
-    a, info = sor_algorithm(H, E, c, C, omega=1)
+    a, info = sor_algorithm(H, E, c, C, omega=omega)
 
     b = -np.sum(a[l:] - a[:l])
 
@@ -133,15 +154,20 @@ def sinc_test():
     y_pred = predict(x_test, x, a, b, gamma)
 
     support_vector_indices, support_vectors = extract_support_vectors(a, x, C)
-
+    bounded_support_vector_indices, bounded_support_vectors = extract_bounded_support_vectors(a, x, C)
     print(f"Количество опорных векторов: {len(support_vectors)}")
+    print(f"Кол-во связных векторов: {len(bounded_support_vector_indices)}")
     print(f"Индексы опорных векторов: {support_vector_indices}")
+    print(f"Пересекающиеся индексы: {np.intersect1d(support_vector_indices, bounded_support_vectors)}")
     print(f"Опорные векторы: {support_vectors}")
+    print(f"Кол-во итераций {len(info.history_of_norm[info.history_of_norm > 0.0])}")
 
     plt.figure(figsize=(10, 6))
     plt.plot(x, y_true, label="True function", color="black", linestyle="--")
     plt.scatter(x, y_noisy, label="Noisy data", color="blue", alpha=0.5)
     plt.scatter(x[support_vector_indices], y_noisy[support_vector_indices], color="red", alpha=0.9, label="Support vectors")
+    plt.scatter(x[bounded_support_vector_indices], y_noisy[bounded_support_vector_indices], color="green", alpha=0.9,
+                label="Bound vectors")
     plt.plot(x_test, y_pred, label="Predicted function", color="red")
     plt.fill_between(x_test, y_pred - epsilon, y_pred + epsilon, color="gray", alpha=0.2, label="ε-tube")
     plt.legend()
@@ -149,7 +175,7 @@ def sinc_test():
     plt.xlabel("x")
     plt.ylabel("y")
     plt.grid()
-    plt.savefig("With_Noise.png")
+    plt.savefig(f"With_Noise_{noise_sigma}.png")
     plt.show()
 
     info.show_history_of_norm()
@@ -162,9 +188,9 @@ def test_without_noise():
     """
     l = 200
     x_min, x_max = -5, 5
-    C = 3
-    epsilon = 0.07
-    gamma = 0.7
+    C = 10
+    epsilon = 0.01
+    gamma = 1
     x = np.linspace(x_min, x_max, l)
     y_true = sinc_function(x)
 
@@ -185,45 +211,61 @@ def test_without_noise():
     x_test = np.linspace(x_min, x_max, 500)
     y_pred = predict(x_test, x, a, b, gamma)
     support_vector_indices, support_vectors = extract_support_vectors(a, x, C)
-
+    bounded_support_vector_indices, bounded_support_vectors = extract_bounded_support_vectors(a, x, C)
+    print(f"Количество опорных векторов: {len(support_vectors)}")
+    print(f"Кол-во связных векторов: {len(bounded_support_vector_indices)}")
+    print(f"Индексы опорных векторов: {support_vector_indices}")
+    print(f"Пересекающиеся индексы: {np.intersect1d(support_vector_indices, bounded_support_vectors)}")
+    print(f"Опорные векторы: {support_vectors}")
+    print(f"Кол-во итераций {len(info.history_of_norm[info.history_of_norm > 0.0])}")
     plt.figure(figsize=(10, 6))
     plt.plot(x, y_true, label="True function", color="black", linestyle="--")
     plt.scatter(x, y_noisy, label="Noiseless data", color="blue", alpha=0.5, s=10)
     plt.plot(x_test, y_pred, label="Predicted function", color="red")
     plt.fill_between(x_test, y_pred - epsilon, y_pred + epsilon, color="gray", alpha=0.2, label="ε-tube")
-    plt.scatter(x[support_vector_indices], y_noisy[support_vector_indices], color="red", alpha=0.9,
-                label="Support vectors")
+    plt.scatter(x[support_vector_indices], y_noisy[support_vector_indices], color="red", alpha=0.9, label="Support vectors")
+    plt.scatter(x[bounded_support_vector_indices], y_noisy[bounded_support_vector_indices], color="green", alpha=0.9,
+                label="Bound vectors")
     plt.legend()
     plt.title("Support Vector Regression without Noise")
     plt.xlabel("x")
     plt.ylabel("y")
     plt.grid()
-    plt.savefig("WithOut_Noise.png")
+    plt.savefig(f"WithOut_Noise_{epsilon}.png")
     plt.show()
 
     mae = mean_absolute_error(y_true, predict(x, x, a, b, gamma))
     print(f"Mean Absolute Error (MAE): {mae:.4f}")
+
+
+
+
 
 def study_mae_vs_support_vectors():
     """
     Исследование зависимости ошибки MAE от количества опорных векторов.
     """
     l = 200
-    x_min, x_max = -7, 7
-    epsilon = 0.1
-    gamma = 1
+    x_min, x_max = -5, 5
+    noise_sigma = 0.1
     x = np.linspace(x_min, x_max, l)
+    gamma = 2
     y_true = sinc_function(x)
-
+    C = 7
     # Добавление шума
-    noise = np.random.normal(0, epsilon / 2, l)
+    noise = np.random.normal(0, noise_sigma, l)
     y_noisy = y_true + noise
 
     # Параметры исследования
-    C_values = np.logspace(-2, 2, 20)  # Различные значения C
+    epsilon_values = np.linspace(0.15, 0.35, 20)
     results = []
 
-    for C in C_values:
+    # Список для хранения количества итераций
+    iteration_counts = []
+
+    support_vector_counts = []
+
+    for epsilon in tqdm(epsilon_values, desc="Epsilon Variation Progress", unit="value"):
         K = compute_kernel_matrix(x, gamma)
 
         H = np.block([[K, -K], [-K, K]])
@@ -243,36 +285,56 @@ def study_mae_vs_support_vectors():
         support_vector_indices, _ = extract_support_vectors(a, x, C)
         num_support_vectors = len(support_vector_indices)
 
-        results.append((C, num_support_vectors, mae))
+        num_iterations = len(info.history_of_norm[info.history_of_norm > 0.0])
+        iteration_counts.append(num_iterations)
+
+        results.append((epsilon, num_support_vectors, mae))
 
     # Преобразование результатов в массивы
-    C_values, num_support_vectors, mae_values = zip(*results)
+    epsilon_values_, num_support_vectors, mae_values = zip(*results)
 
     # Визуализация
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(16, 16))  # Увеличиваем размер фигуры для 2x2 сетки
 
-    # График зависимости MAE от числа опорных векторов
-    plt.subplot(1, 2, 1)
+    # График 1: Зависимость MAE от числа опорных векторов
+    plt.subplot(2, 2, 1)
     plt.plot(num_support_vectors, mae_values, marker='o', color='blue')
     plt.xlabel("Number of Support Vectors")
     plt.ylabel("MAE")
     plt.title("MAE vs Number of Support Vectors")
     plt.grid()
 
-    # График зависимости MAE от параметра C
-    plt.subplot(1, 2, 2)
-    plt.plot(C_values, mae_values, marker='o', color='green')
-    plt.xscale('log')
-    plt.xlabel("C (Regularization Parameter)")
+    # График 2: Зависимость MAE от параметра epsilon
+    plt.subplot(2, 2, 2)
+    plt.plot(epsilon_values_, mae_values, marker='o', color='green')
+    plt.xlabel("Eps (Tube parameter)")
     plt.ylabel("MAE")
-    plt.title("MAE vs C")
+    plt.title("MAE vs eps")
+    plt.grid()
+
+    # График 3: Зависимость числа опорных векторов от параметра epsilon
+    plt.subplot(2, 2, 3)
+    plt.plot(epsilon_values_, num_support_vectors, marker='o', color='purple')
+    plt.xlabel("Eps (Tube parameter)")
+    plt.ylabel("Number of Support Vectors")
+    plt.title("Number of Support Vectors vs eps")
+    plt.grid()
+
+    # График 4: Зависимость количества итераций от параметра epsilon
+    plt.subplot(2, 2, 4)
+    plt.plot(epsilon_values_, iteration_counts, marker='o', color='red')
+    plt.xlabel("Eps (Tube parameter)")
+    plt.ylabel("Number of Iterations")
+    plt.title("Number of Iterations vs eps")
     plt.grid()
 
     plt.tight_layout()
     plt.savefig("Amount_sv_vs_MAE.jpg")
     plt.show()
 
-sinc_test()
+study_mae_vs_support_vectors()
+
+# sinc_test()
 # test_without_noise()
 
 # study_mae_vs_support_vectors()
