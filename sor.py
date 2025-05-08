@@ -100,7 +100,7 @@ def extract_support_vectors(a, x_train, C):
     support_vector_indices = []
 
     for i in range(l):
-        if (0 < a[i] < C and np.isclose(a[i+l], 0)) or (0 < a[i + l] < C and np.isclose(a[i], 0)):  # Проверяем условия для a_i и a_i^*
+        if (0 < a[i] and np.isclose(a[i+l], 0)) or (0 < a[i + l] and np.isclose(a[i], 0)):  # Проверяем условия для a_i и a_i^*
             support_vector_indices.append(i)
 
     support_vectors = x_train[support_vector_indices]
@@ -332,9 +332,9 @@ def study_mae_vs_support_vectors():
     plt.savefig("Amount_sv_vs_MAE.jpg")
     plt.show()
 
-study_mae_vs_support_vectors()
+# study_mae_vs_support_vectors()
 
-# sinc_test()
-# test_without_noise()
+sinc_test()
+test_without_noise()
 
 # study_mae_vs_support_vectors()
